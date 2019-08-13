@@ -1,0 +1,29 @@
+{
+  "name": "principles_of_ai",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "live-server": "^1.2.1",
+    "phaser": "^3.19.0",
+    "ts-loader": "^6.0.4",
+    "typescript": "^3.5.3",
+    "webpack": "^4.39.1",
+    "webpack-cli": "^3.3.6"
+  },
+  "scripts": {
+    "build": "webpack",
+    "start": "webpack --watch & live-server html --port=8085"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cair/principles_of_ai.git"
+  },
+  "author": "Per-Arne Andersen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cair/principles_of_ai/issues"
+  },
+  "homepage": "https://github.com/cair/principles_of_ai#readme"
+}
