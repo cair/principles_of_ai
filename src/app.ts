@@ -7,6 +7,55 @@ import Grid = Phaser.GameObjects.Grid;
 import $ from "jquery";
 import MaxAdd = Phaser.Math.MaxAdd;
 
+class HTMLMenu{
+    static currentGame: any = null;
+    constructor(game: Game){
+    }
+
+    static setup(game: Game){
+        if(this.currentGame !== null){
+            this.currentGame.game.destroy(true);
+        }
+        this.currentGame = game;
+
+        $("#to_menu").off("click");
+        $("#to_menu").on("click", (event) => {
+            HTMLMenu.toMenu();
+        });
+
+        $("#save_reset").off("click");
+        $("#save_reset").on("click", (event) => {
+            on_load();
+        });
+
+    }
+
+    static getAgentEnabled(){
+        return $("#agent").is(":checked");
+    }
+
+    static getPOMDPEnabled(){
+        return $("#pomdp").is(":checked");
+    }
+    static getGridSize(){
+        // @ts-ignore
+        return parseInt($("#grid_size").val().toString());
+    }
+
+    static getAgentSpeed(){
+        // @ts-ignore
+        return parseInt($("#agent_speed").val().toString());
+    }
+
+
+    static toMenu() {
+        document.location.reload()
+    }
+
+
+
+}
+
 class Console{
 
     colors: any = {
@@ -511,9 +560,6 @@ class Player extends TileObject{
             for(let key_idx in keys){
                 this.scene.input.keyboard.addKey(keys[key_idx]).on('down', (event: any) => {
                     let ret = <any>this.scene.step.bind(this.scene, parseInt(direction))();
-
-
-                    this.scene.console.addLine("info", "State: " + ret.s + ", Action: " + ret.a + ", Reward: " + ret.r + ", Next State: " + ret.s1 + ", Is Terminal: " + ret.t)
                 }, this)
 
             }
@@ -579,6 +625,9 @@ class Gridworld extends Scene{
 
     constructor(key: string | Phaser.Types.Scenes.SettingsConfig) {
         super((key) ? key : { key: 'gridworld'});
+        this.config.grid_w = HTMLMenu.getGridSize();
+        this.config.grid_h = HTMLMenu.getGridSize();
+
     }
 
     create() {
@@ -708,6 +757,7 @@ class Gridworld extends Scene{
         }
 
         this.updateState();
+        this.console.addLine("info", "State: " + s0 + ", Action: " + a + ", Reward: " + r + ", Next State: " + s1 + ", Is Terminal: " + t)
 
         return {
             s: s0,
@@ -874,7 +924,7 @@ class Wumpus extends Gridworld{
 
     constructor() {
         super({ key: 'wumpus'});
-        console.log("Wumpus!")
+        this.config.pomdp = HTMLMenu.getPOMDPEnabled();
     }
 
     _create_darkness(){
@@ -1037,6 +1087,7 @@ class Game{
     }
 
     _getGameScene(){
+
         let activeScene = <any>this.game.scene.getScenes(true)[0];
 
         if(!activeScene  || !activeScene.hasOwnProperty('isGame')){
@@ -1075,6 +1126,7 @@ class Game{
 
 
     }
+
 
     game: Phaser.Game;
 
@@ -1151,12 +1203,14 @@ class QLearning{
 }
 
 
+let on_load = () => {
 
-window.onload = () => {
     // TODO gui setters.
-    let SPEED = 1;
+    let SPEED = HTMLMenu.getAgentSpeed();
 
     let game = new Game();
+    HTMLMenu.setup(game);
+
     let qlearning = new QLearning(4);
     let state: any = null;
 
@@ -1178,35 +1232,48 @@ window.onload = () => {
 
             let action = agent.predict(state);
 
-            let {s, a, r, s1, t} = game.step(action);
+            let data = game.step(action);
+            if(data !== null && !data.t){
 
-            agent.learn(s, a, r, s1, t);
+                let {s, a, r, s1, t} = data;
 
-            // Draw statistics
-            game.cellOverlay({
-                s: s,
-                data: agent.Q[s]
-            });
+                agent.learn(s, a, r, s1, t);
 
 
-            if(t === true){
+                // Draw statistics
+                game.cellOverlay({
+                    s: s,
+                    data: agent.Q[s]
+                });
+
+                state = s1;
+
+            } else {
                 // Restart setup loop
                 await_game_then_start(
                     agent_loop.bind(null, qlearning)
                 );
                 clearInterval(me);
-            }
 
-            state = s1;
+            }
 
         }, SPEED);
     };
 
     // Wait for game to start
-    await_game_then_start(
-        agent_loop.bind(null, qlearning)
-    )
+    if(HTMLMenu.getAgentEnabled()){
+        await_game_then_start(
+            agent_loop.bind(null, qlearning)
+        );
+    }
 
 
 
 };
+
+
+
+window.onload = on_load;
+
+
+
