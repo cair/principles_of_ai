@@ -4,6 +4,8 @@ import Scene = Phaser.Scene;
 import Sprite = Phaser.GameObjects.Sprite;
 import Graphics = Phaser.GameObjects.Graphics;
 import Grid = Phaser.GameObjects.Grid;
+import $ from "jquery";
+import MaxAdd = Phaser.Math.MaxAdd;
 
 class Console{
 
@@ -48,7 +50,7 @@ class Preload extends Scene{
     create(){
         this.scene.start("menu", {})
     }
-    
+
 }
 
 class Menu extends Scene {
@@ -326,13 +328,54 @@ class Movable implements Position{
 
 }
 
+class ColorGradient{
+
+    static percentColors = [
+        { pct: 0.0, color: { r: 0xff, g: 0x00, b: 0 } },
+        { pct: 0.5, color: { r: 0xff, g: 0xff, b: 0 } },
+        { pct: 1.01, color: { r: 0x00, g: 0xff, b: 0 } } ];
+
+    static componentToHex(c: number) {
+        var hex = c.toString(16);
+        return hex.length == 1 ? "0" + hex : hex;
+    }
+
+    static rgbToHex(r:number, g:number, b:number) {
+        return "0x" + ColorGradient.componentToHex(r) + ColorGradient.componentToHex(g) + ColorGradient.componentToHex(b);
+    }
+
+    static get = function(pct: number) {
+        for (var i = 1; i < ColorGradient.percentColors.length - 1; i++) {
+            if (pct <= ColorGradient.percentColors[i].pct) {
+                break;
+            }
+        }
+        var lower = ColorGradient.percentColors[i - 1];
+        var upper = ColorGradient.percentColors[i];
+        var range = upper.pct - lower.pct;
+        var rangePct = (pct - lower.pct) / range;
+        var pctLower = 1 - rangePct;
+        var pctUpper = rangePct;
+        var color = {
+            r: Math.floor(lower.color.r * pctLower + upper.color.r * pctUpper),
+            g: Math.floor(lower.color.g * pctLower + upper.color.g * pctUpper),
+            b: Math.floor(lower.color.b * pctLower + upper.color.b * pctUpper)
+        };
+        return ColorGradient.rgbToHex(color.r, color.g, color.b);
+        // or output as hex if preferred
+
+    }
+
+
+}
+
 
 class TileObject extends Movable{
     sprite: Sprite;
 
 
     constructor(protected scene: Gridworld, public type: TileType, public x: number, public y: number) {
-        super(scene, x, y, scene.grid_w - 1, scene.grid_h - 1); // - 1 because it goes from 0 to (max-1)
+        super(scene, x, y, scene.config.grid_w - 1, scene.config.grid_h - 1); // - 1 because it goes from 0 to (max-1)
 
     }
 
@@ -403,28 +446,28 @@ class TileObject extends Movable{
 class Player extends TileObject{
 
     controller: any = {
-        1: {
+        0: {
             keys: [
                 Phaser.Input.Keyboard.KeyCodes.W,
                 Phaser.Input.Keyboard.KeyCodes.UP
             ],
             fn: this.moveUp
         },
-        2: {
+        1: {
             keys: [
                 Phaser.Input.Keyboard.KeyCodes.S,
                 Phaser.Input.Keyboard.KeyCodes.DOWN
             ],
             fn: this.moveDown
         },
-        3: {
+        2: {
             keys: [
                 Phaser.Input.Keyboard.KeyCodes.A,
                 Phaser.Input.Keyboard.KeyCodes.LEFT
             ],
             fn: this.moveLeft
         },
-        4: {
+        3: {
             keys: [
                 Phaser.Input.Keyboard.KeyCodes.D,
                 Phaser.Input.Keyboard.KeyCodes.RIGHT
@@ -467,10 +510,10 @@ class Player extends TileObject{
 
             for(let key_idx in keys){
                 this.scene.input.keyboard.addKey(keys[key_idx]).on('down', (event: any) => {
-                    let ret = this.scene.step.bind(this.scene, parseInt(direction))()
+                    let ret = <any>this.scene.step.bind(this.scene, parseInt(direction))();
 
 
-                    this.scene.console.addLine("info", "State: " + ret[0] + ", Action: " + ret[1] + ", Reward: " + ret[2] + ", Next State: " + ret[3] + ", Is Terminal: " + ret[4])
+                    this.scene.console.addLine("info", "State: " + ret.s + ", Action: " + ret.a + ", Reward: " + ret.r + ", Next State: " + ret.s1 + ", Is Terminal: " + ret.t)
                 }, this)
 
             }
@@ -482,10 +525,14 @@ class Player extends TileObject{
 
 class Gridworld extends Scene{
     grid: Grid;
-    grid_w: number = 10; // TODO - dynamic set
-    grid_h: number = 10; // TODO - dynamic set
-    player_x: number = 0; // TODO - dynamic set
-    player_y: number = 9; // TODO - dynamic set
+    isGame = true;
+    config: any = {
+        grid_w: 10, // TODO - dynamic set
+        grid_h: 10, // TODO - dynamic set
+        player_x: 0, // TODO - dynamic set
+        player_y: 9, // TODO - dynamic set
+    };
+
     console = new Console("console");
 
     rewards: number[] = [];
@@ -501,6 +548,8 @@ class Gridworld extends Scene{
             }
         }
     };
+
+    triangleOverlay: any = [];
 
     tiles: TileObject[] = [
         // Goal Tiles
@@ -534,10 +583,61 @@ class Gridworld extends Scene{
 
     create() {
         this._create_static_grid();
+        this._create_triangle_overlay();
         this._create_player();
         this._create_tiles();
 
 
+
+    }
+
+
+    _create_triangle_overlay(){
+        let { width, height } = this.sys.game.canvas;
+
+        this.cell_width = width / this.config.grid_w;
+        this.cell_height = height / this.config.grid_h;
+
+        // Up
+        let upTriangle = this.add.graphics();
+        upTriangle.fillStyle(0xFFFFFF, 1.0);
+        upTriangle.fillTriangle(0, 0, this.cell_width, 0, this.cell_width / 2, this.cell_height / 2);
+        upTriangle.generateTexture("triangle_up");
+
+        // Down
+        let downTriangle = this.add.graphics();
+        downTriangle.fillStyle(0xFFFFFF, 1.0);
+        downTriangle.fillTriangle(0, this.cell_height, this.cell_width, this.cell_height, this.cell_width / 2, this.cell_height / 2);
+
+        downTriangle.generateTexture("triangle_down");
+
+        let leftTriangle = this.add.graphics();
+        leftTriangle.fillStyle(0xFFFFFF, 1.0);
+        leftTriangle.fillTriangle(0, 0, 0, this.cell_height, this.cell_width / 2, this.cell_height / 2);
+        leftTriangle.generateTexture("triangle_left");
+
+        let rightTriangle = this.add.graphics();
+        rightTriangle.fillStyle(0xFFFFFF, 1.0);
+        rightTriangle.fillTriangle(this.cell_width, 0, this.cell_width, this.cell_height, this.cell_width / 2, this.cell_height / 2);
+        rightTriangle.generateTexture("triangle_right");
+
+        for(let i = 0; i < this.config.grid_h * this.config.grid_w; i++){
+
+            let {x, y} = this.indexToXY(i);
+            let pixelXStart = x * this.cell_width;
+            let pixelYStart = y * this.cell_height;
+
+
+            let up = this.add.sprite(pixelXStart, pixelYStart, "triangle_up");
+            up.setOrigin(0, 0);
+            let down = this.add.sprite(pixelXStart, pixelYStart, "triangle_down");
+            down.setOrigin(0, 0);
+            let left = this.add.sprite(pixelXStart, pixelYStart, "triangle_left");
+            left.setOrigin(0, 0);
+            let right = this.add.sprite(pixelXStart, pixelYStart, "triangle_right");
+            right.setOrigin(0, 0);
+            this.triangleOverlay.push([up, down, left, right])
+        }
     }
 
     isCollision(obj1: Movable, obj2: Movable) {
@@ -550,11 +650,47 @@ class Gridworld extends Scene{
         this.tiles.forEach((tile) => {
             tile.reset();
         })
+
+        return this.getState();
+    }
+
+    getState(){
+        return this.XYtoIndex(this.player.x, this.player.y);
+    }
+
+    cellOverlay(data: any){
+
+        let cellItems = this.triangleOverlay[data.s];
+
+        let percentage_list = this._list_to_percentage(data.data);
+
+        for(let i = 0; i < percentage_list.length; i++){
+            let cell = cellItems[i];
+            let percentage = percentage_list[i];
+            let color = ColorGradient.get(percentage);
+
+            cell.tint = color;
+
+        }
+
+
+    }
+
+    _list_to_percentage(list: []){
+
+        let maxVal = Math.max(...list);
+        let newlist = list.map((val)=>{
+            let ratio = (val + 1) / (maxVal + 1);
+            ratio = Math.min(1, ratio);
+            ratio = Math.max(0, ratio);
+            return ratio;
+        });
+        return newlist;
     }
 
 
     step(action: number){
-        let s0 = this.XYtoIndex(this.player.x, this.player.y);
+        let s0 = this.getState();
         let a = action;
         let r = null;
         let s1 = null;
@@ -567,13 +703,19 @@ class Gridworld extends Scene{
         }else{
             this.player.trigger_action(action);
             r = this.rewards.slice(-1)[0];
-            s1 = this.XYtoIndex(this.player.x, this.player.y);
+            s1 = this.getState()
             t = this.isTerminal;
         }
 
         this.updateState();
 
-        return [s0, a, r, s1, t];
+        return {
+            s: s0,
+            a: a,
+            r: r,
+            s1: s1,
+            t: t
+        }
     }
 
     updateState(){
@@ -624,17 +766,17 @@ class Gridworld extends Scene{
 
     indexToXY(i: number){
         return {
-            x: i % this.grid_w,
-            y: Math.floor(i / this.grid_w)
+            x: i % this.config.grid_w,
+            y: Math.floor(i / this.config.grid_w)
         }
     }
 
     XYtoIndex(x: number, y: number){
-        return x + this.grid_w*y;
+        return x + this.config.grid_w*y;
     }
 
     _create_player(){
-       this.player = new Player(this, this.player_x, this.player_y);
+       this.player = new Player(this, this.config.player_x, this.config.player_y);
     }
 
     _create_tiles(){
@@ -646,8 +788,8 @@ class Gridworld extends Scene{
     _create_static_grid(){
         let { width, height } = this.sys.game.canvas;
 
-        this.cell_width = width / this.grid_w;
-        this.cell_height = height / this.grid_h;
+        this.cell_width = width / this.config.grid_w;
+        this.cell_height = height / this.config.grid_h;
 
         this.grid = this.add.grid(
             0,
@@ -663,7 +805,7 @@ class Gridworld extends Scene{
         this.grid.setOrigin(0, 0);
 
         // Generate state names (numbers)
-        for(let i = 0; i < this.grid_w * this.grid_h; i++){
+        for(let i = 0; i < this.config.grid_w * this.config.grid_h; i++){
             let {x, y} = this.indexToXY(i);
 
             this.add.text(x * this.cell_width,y * this.cell_height, i.toString())
@@ -676,12 +818,15 @@ class Gridworld extends Scene{
 
 class Wumpus extends Gridworld{
     // http://www.kr.tuwien.ac.at/students/prak_wumpusjava/simulator/Rules.html
+    // https://github.com/yassinebelmamoun/wumpus-hunting-Qlearning
 
-    grid_w: number = 10; // TODO - dynamic set
-    grid_h: number = 10; // TODO - dynamic set
-    player_x: number = 0; // TODO - dynamic set
-    player_y: number = this.grid_h - 1; // TODO - dynamic set
-    pomdp: boolean = false;
+    config: any = {
+        grid_w: 10, // TODO - dynamic set
+        grid_h: 10, // TODO - dynamic set
+        player_x: 0, // TODO - dynamic set
+        player_y: 9, // TODO - dynamic set
+        pomdp: false
+    };
 
     tiles: TileObject[] = [
         // Gold
@@ -733,7 +878,7 @@ class Wumpus extends Gridworld{
     }
 
     _create_darkness(){
-        for(let i = 0; i < this.grid_h * this.grid_w; i++) {
+        for(let i = 0; i < this.config.grid_h * this.config.grid_w; i++) {
             let {x, y} = this.indexToXY(i);
 
             let darkness_tile = new TileObject(this, TileType.DARKNESS, x, y);
@@ -795,15 +940,12 @@ class Wumpus extends Gridworld{
         }).forEach((item) => {
             item.sprite.setVisible(true);
         });
-        this._set_visibility((this.pomdp) ? "on" : "off");
+        this._set_visibility((this.config.pomdp) ? "on" : "off");
 
-
-
-        super.reset();
-
+        return super.reset();
     }
 
-    step(action: number): any[] {
+    step(action: number): any {
         let ret = super.step(action);
         this._set_visibility();
         this._evaluateHints();
@@ -873,12 +1015,7 @@ class Wumpus extends Gridworld{
     create() {
         super.create();
         this._create_darkness();
-        this._set_visibility((this.pomdp) ? "on" : "off");
-
-
-
-
-
+        this._set_visibility((this.config.pomdp) ? "on" : "off");
 
     }
 
@@ -899,6 +1036,46 @@ class Game{
         this.game = new Phaser.Game(gameConfig);
     }
 
+    _getGameScene(){
+        let activeScene = <any>this.game.scene.getScenes(true)[0];
+
+        if(!activeScene  || !activeScene.hasOwnProperty('isGame')){
+            return null;
+        }
+
+        return activeScene
+    }
+
+    step(action: number) {
+        let activeScene = this._getGameScene();
+        if(!activeScene){
+            return null;
+        }
+
+        return activeScene.step(action)
+
+    }
+
+    reset(){
+        let activeScene = this._getGameScene();
+        if(!activeScene){
+            return null;
+        }
+
+        return activeScene.reset();
+    }
+
+    cellOverlay(data: any){
+        let activeScene = this._getGameScene();
+        if(!activeScene){
+            return null;
+        }
+
+        activeScene.cellOverlay(data);
+
+
+    }
+
     game: Phaser.Game;
 
 
@@ -907,12 +1084,128 @@ class Game{
 }
 
 
+class QLearning{
+
+    private Q: any = {};
+    private epsilon: number ;
+
+    constructor(
+        private num_actions: number,
+        private gamma: number = 0.99,
+        private learning_rate: number = 0.1,
+        private e_start: number = 1.0,
+        private e_end: number = 0.01,
+        private e_decay: number = 0.0005
+
+    ){
+        this.epsilon = this.e_start;
+    }
+
+    predict(state: integer){
+        this._state_exists(state);
+
+        let action = null;
+
+        if(Math.random() < this.epsilon) {
+            // Random action
+            action = this._randrange(0, this.num_actions);
+
+        } else {
+            // Greedy-selection (max)
+            action = this._argmax(this.Q[state])
+        }
+
+        // Decay epsilon
+        this.epsilon = Math.max(this.e_end, this.epsilon - this.e_decay);
+
+        return action;
+
+    }
+
+    learn(s: number, a: number, r: number, s1: number, t: number){
+        this._state_exists(s1);
+        this.Q[s][a] = this.Q[s][a] + this.learning_rate * (r + this.gamma * Math.max(...this.Q[s1]) - this.Q[s][a])
+
+
+    }
+
+    _state_exists(state: number){
+        let exists_in_map = (state in this.Q);
+        if(!exists_in_map) {
+            // Initial state in the table and fill with zeros
+            this.Q[state] = new Array(this.num_actions);
+            this.Q[state].fill(0);
+        }
+
+    }
+
+    _argmax(array: any[]) {
+        // @ts-ignore
+        return [].map.call(array, (x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+    }
+
+    _randrange(min: number, max:number) {
+        return Math.floor(Math.random() * max) + min
+    }
+
+}
 
 
 
 window.onload = () => {
+    // TODO gui setters.
+    let SPEED = 1;
 
-    let game = new Game()
+    let game = new Game();
+    let qlearning = new QLearning(4);
+    let state: any = null;
+
+    let await_game_then_start = (agent_loop: any) => {
+        let me = setInterval(function() {
+            state = game.reset();
+
+            if(state !== null){
+                agent_loop();
+                clearInterval(me);
+            }
+        }, 100);
+        return me;
+    };
+
+    let agent_loop = (agent: any) => {
+
+        let me = setInterval(function() {
+
+            let action = agent.predict(state);
+
+            let {s, a, r, s1, t} = game.step(action);
+
+            agent.learn(s, a, r, s1, t);
+
+            // Draw statistics
+            game.cellOverlay({
+                s: s,
+                data: agent.Q[s]
+            });
+
+
+            if(t === true){
+                // Restart setup loop
+                await_game_then_start(
+                    agent_loop.bind(null, qlearning)
+                );
+                clearInterval(me);
+            }
+
+            state = s1;
+
+        }, SPEED);
+    };
+
+    // Wait for game to start
+    await_game_then_start(
+        agent_loop.bind(null, qlearning)
+    )
 
 
 

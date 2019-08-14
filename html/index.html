@@ -8,15 +8,43 @@
             margin: 0;
             overflow: hidden;
         }
+
+        #game{
+            width: 80%;
+        }
+
+        #pane{
+            width: 100%;
+            height: 100px;
+            display: flex;
+        }
+
+        #console{
+            width: 50%;
+            height: 100px;
+            max-height: 100px;
+            overflow-y: scroll;
+            border: 1px solid black;
+
+        }
+
+        #settings{
+            width: 50%;
+            border: 1px solid black;
+
+        }
+
     </style>
 </head>
 <body>
 <div id="game"></div>
-<div>
-    <div id="console"  style="width: 100%; height: 100px; overflow-y: scroll; border: 1px solid black
-">
+<div id="pane">
+    <div id="console"></div>
+    <div id="settings">
+
 
     </div>
+
 </div>
 
 </body>

@@ -5,6 +5,8 @@
   "main": "index.js",
   "dependencies": {},
   "devDependencies": {
+    "@types/jquery": "^3.3.31",
+    "jquery": "^3.4.1",
     "live-server": "^1.2.1",
     "phaser": "^3.19.0",
     "ts-loader": "^6.0.4",
